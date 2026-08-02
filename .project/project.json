@@ -1,0 +1,28 @@
+{
+  "$schema": "../schemas/project.schema.json",
+  "project_id": "p_yvyc",
+  "author": {
+    "id": "548607299"
+  },
+  "entry": "main.lua",
+  "version": "1.0.0",
+  "taptap_publish": {
+    "title": "齿轮工坊",
+    "description": "点击金色主齿轮积累金币，升级每次点击收益，逐步建设原创机械工坊。",
+    "category": "casual",
+    "screen_orientation": "portrait",
+    "collection_type": "sce",
+    "trial_note": "<developer's note>",
+    "transparent": false,
+    "app_platforms": "1,2",
+    "developer_id": 259984
+  },
+  "assets": {
+    "icon": "",
+    "screenshots": [],
+    "promotional_image": ""
+  },
+  "metadata": {
+    "updated_at": "2026-08-01T15:28:47.618Z"
+  }
+}
