@@ -1,28 +1,50 @@
 {
   "$schema": "../schemas/project.schema.json",
-  "project_id": "p_yvyc",
+  "project_id": "p_462c",
   "author": {
     "id": "548607299"
   },
   "entry": "main.lua",
-  "version": "1.0.0",
+  "version": "1.0.7",
   "taptap_publish": {
     "title": "齿轮工坊",
     "description": "点击金色主齿轮积累金币，升级每次点击收益，逐步建设原创机械工坊。",
     "category": "casual",
-    "screen_orientation": "portrait",
+    "screen_orientation": "landscape",
     "collection_type": "sce",
-    "trial_note": "<developer's note>",
+    "trial_note": "本版本展示齿轮工坊的核心玩法：点击与升级齿轮、搭建机械传动、驱动工厂生产并逐步提升收益。",
     "transparent": false,
     "app_platforms": "1,2",
-    "developer_id": 259984
+    "developer_id": 418172,
+    "app_id": 898458,
+    "miniapp_id": "tapmcmsllm1m7nebvu"
   },
   "assets": {
-    "icon": "",
-    "screenshots": [],
-    "promotional_image": ""
+    "icon": "./game_material/ICON_2026-08-19T09-40-06_01.png",
+    "icon_url": "https://tapcode-sce.spark.xd.com/assets/game_material/齿轮工坊/ICON_2026-08-19T09-40-06_01.png",
+    "screenshots": [
+      "./game_material/SCREENSHOT_2026-08-19T09-40-06_01.png",
+      "./game_material/SCREENSHOT_2026-08-19T09-40-06_02.png",
+      "./game_material/SCREENSHOT_2026-08-19T09-40-06_03.png"
+    ],
+    "screenshot_urls": [
+      "https://tapcode-sce.spark.xd.com/assets/game_material/齿轮工坊/SCREENSHOT_2026-08-19T09-40-06_01.png",
+      "https://tapcode-sce.spark.xd.com/assets/game_material/齿轮工坊/SCREENSHOT_2026-08-19T09-40-06_02.png",
+      "https://tapcode-sce.spark.xd.com/assets/game_material/齿轮工坊/SCREENSHOT_2026-08-19T09-40-06_03.png"
+    ],
+    "promotional_image": "./game_material/PROMO_2026-08-19T15-14-52_01.jpg",
+    "promotional_image_url": "https://tapcode-sce.spark.xd.com/assets/game_material/齿轮工坊/PROMO_2026-08-19T15-14-52_01.jpg",
+    "cover_vertical": "./.project/game_material/COVER_VERTICAL_2026-08-19T15-32-20_01.png",
+    "cover_vertical_url": "https://tapcode-sce.spark.xd.com/assets/game_material/齿轮工坊/COVER_VERTICAL_2026-08-19T15-32-20_01.png",
+    "cover_horizontal": "./.project/game_material/COVER_HORIZONTAL_2026-08-19T15-32-20_01.png",
+    "cover_horizontal_url": "https://tapcode-sce.spark.xd.com/assets/game_material/齿轮工坊/COVER_HORIZONTAL_2026-08-19T15-32-20_01.png"
   },
   "metadata": {
-    "updated_at": "2026-08-01T15:28:47.618Z"
+    "updated_at": "2026-08-20T12:18:02.258Z",
+    "promo_dependent_hash": "2edcc75b90e5136187d1820363665098"
+  },
+  "test_qrcode": {
+    "url": "https://tapcode-sce.spark.xd.com/qrcode/p_462c_1787228282138.png",
+    "generated_at": "2026-08-20T12:18:02.258Z"
   }
 }

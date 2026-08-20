@@ -39,12 +39,10 @@ urhox-libs/
 AGENTS.md
 CLAUDE.md
 
-# Local game save state
+# Local game state and generated validation artifacts
 gear_workshop_save_*.json
-
-# Local validation outputs
+gear_workshop_reset_v*_save_*.json
 .tmp_*.txt
-
-# Generated uploads and preview screenshots
+logs_*.txt
 _uploads/
 screenshots/

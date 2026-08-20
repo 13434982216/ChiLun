@@ -1,26 +1,183 @@
 local GearDefinitions = {}
 
+GearDefinitions.GeometryVersion = 4
+GearDefinitions.TeethPerMainRadius = 16
+GearDefinitions.GearProfile = {
+    addendum = 1.0,
+    dedendum = 1.25,
+    tipHalfWidth = 0.16,
+    pitchHalfWidth = 0.25,
+    rootHalfWidth = 0.38,
+}
+
+function GearDefinitions.GetToothModule(pitchRadius, teeth)
+    return pitchRadius * 2 / math.max(1, teeth)
+end
+
+function GearDefinitions.GetTipRadius(pitchRadius, teeth)
+    return pitchRadius
+        + GearDefinitions.GetToothModule(pitchRadius, teeth)
+            * GearDefinitions.GearProfile.addendum
+end
+
+function GearDefinitions.GetRootRadius(pitchRadius, teeth)
+    return math.max(
+        0,
+        pitchRadius
+            - GearDefinitions.GetToothModule(pitchRadius, teeth)
+                * GearDefinitions.GearProfile.dedendum
+    )
+end
+
 GearDefinitions.Main = {
     type = "main",
     name = "金色双层驱动齿轮",
     baseRPM = 1.8,
     maxRPM = 60 * 60,
-    baseTorque = 24,
-    torquePerLevel = 8,
-    autoUnlockTorqueLevel = 3,
+    baseTorque = 0,
+    torquePerLevel = 1.0,
+    autoUnlockTorqueLevel = 1,
     baseCircleIncome = 1,
     circleIncomePerLevel = 1,
+    baseManualClickIncome = 1.00,
+    manualClickGrowth = 1.30,
     manualClickMax = 39,
     rings = {
         outer = {
             name = "外层大齿圈",
-            teeth = 32,
+            teeth = 16,
             radiusScale = 1.0,
         },
         inner = {
             name = "内层小齿圈",
-            teeth = 12,
+            teeth = 6,
             radiusScale = 0.375,
+        },
+    },
+}
+
+GearDefinitions.CurrencyGenerator = {
+    id = "currencyGenerator",
+    name = "货币生成器",
+    radiusScale = 1.0,
+    requiredTorque = 4.0,
+    load = 0.25,
+    rewardProductionSeconds = 150,
+    xOffsetInMainRadii = 2.0,
+    yOffsetInMainRadii = -27.6,
+    rings = {
+        outer = {
+            name = "外露传动齿圈",
+            teeth = 16,
+            radiusScale = 1.0,
+        },
+    },
+}
+
+GearDefinitions.MiningMachine = {
+    id = "miningMachine",
+    name = "扭矩矿机",
+    radiusScale = 1.0,
+    requiredLifetimeCoins = 100000000,
+    requiredTorque = 100.0,
+    idealTorque = 140.0,
+    load = 0.45,
+    minRPM = 26.0,
+    idealMinRPM = 26.0,
+    idealMaxRPM = 40.0,
+    maxRPM = 60.0,
+    maxOre = 100,
+    oreTypeOrder = {
+        "iron",
+        "copper",
+        "silver",
+        "gold",
+        "crystal",
+    },
+    oreTypes = {
+        iron = {
+            id = "iron",
+            name = "铁矿石",
+            rarity = "常见",
+            weight = 55,
+            sellCoins = 25,
+        },
+        copper = {
+            id = "copper",
+            name = "铜矿石",
+            rarity = "常见",
+            weight = 25,
+            sellCoins = 45,
+        },
+        silver = {
+            id = "silver",
+            name = "银矿石",
+            rarity = "稀有",
+            weight = 12,
+            sellCoins = 90,
+        },
+        gold = {
+            id = "gold",
+            name = "金矿石",
+            rarity = "史诗",
+            weight = 6,
+            sellCoins = 180,
+        },
+        crystal = {
+            id = "crystal",
+            name = "晶核矿",
+            rarity = "传说",
+            weight = 2,
+            sellCoins = 500,
+        },
+    },
+    deliveryOre = 5,
+    deliveryCoins = 260,
+    xOffsetInMainRadii = 41.0,
+    yOffsetInMainRadii = 0.4,
+    drillLevels = {
+        { cycleSeconds = 90, orePerCycle = 8 },
+        { cycleSeconds = 78, orePerCycle = 8, coinCost = 180, oreCost = 12 },
+        { cycleSeconds = 66, orePerCycle = 8, coinCost = 550, oreCost = 35 },
+        { cycleSeconds = 66, orePerCycle = 10, coinCost = 1400, oreCost = 80 },
+    },
+    rings = {
+        outer = {
+            name = "矿机传动齿圈",
+            teeth = 16,
+            radiusScale = 1.0,
+        },
+    },
+}
+
+GearDefinitions.PowerGeneratorInterface = {
+    id = "powerGeneratorInterface",
+    name = "发电机专用传动接口",
+    radiusScale = 1.0,
+    requiredTorque = GearDefinitions.MiningMachine.requiredTorque,
+    load = GearDefinitions.MiningMachine.load,
+    rings = {
+        outer = {
+            name = "专用接口齿圈",
+            teeth = 16,
+            radiusScale = 1.0,
+        },
+    },
+}
+
+GearDefinitions.ClockInterface = {
+    id = "clockInterface",
+    name = "增益钟表传动接口",
+    radiusScale = 1.0,
+    requiredLifetimeCoins = 200000000,
+    requiredTorque = 50.0,
+    load = 0.20,
+    directIncomeMultiplier = 1.20,
+    rings = {
+        outer = {
+            name = "钟表黄铜接口齿圈",
+            teeth = 16,
+            radiusScale = 1.0,
         },
     },
 }
@@ -28,115 +185,143 @@ GearDefinitions.Main = {
 GearDefinitions.Revenue = {
     small = {
         type = "small",
-        name = "小型收益齿轮",
+        name = "小型传动齿轮",
         teeth = 16,
-        radiusScale = 0.5,
+        radiusScale = 1.0,
         baseTorque = 48,
-        baseLoad = 4,
-        baseIncome = 1,
-        purchaseCost = 15,
+        baseLoad = 0.25,
+        purchaseCost = 100,
         upgradeBaseCost = 20,
     },
     medium = {
         type = "medium",
-        name = "中型收益齿轮",
-        teeth = 32,
-        radiusScale = 1.0,
+        name = "中型传动齿轮",
+        teeth = 24,
+        radiusScale = 1.5,
         baseTorque = 64,
-        baseLoad = 7,
-        baseIncome = 3,
-        purchaseCost = 45,
+        baseLoad = 0.5,
+        purchaseCost = 250,
         upgradeBaseCost = 55,
     },
     large = {
         type = "large",
-        name = "大型收益齿轮",
-        teeth = 48,
-        radiusScale = 1.5,
+        name = "大型传动齿轮",
+        teeth = 32,
+        radiusScale = 2.0,
         baseTorque = 96,
-        baseLoad = 11,
-        baseIncome = 6,
-        purchaseCost = 100,
+        baseLoad = 0.75,
+        purchaseCost = 500,
         upgradeBaseCost = 120,
+        incomeBonusPerLevel = 0.15,
     },
     large_compound = {
         type = "large_compound",
-        name = "大型同轴复合齿轮",
-        teeth = 48,
-        radiusScale = 1.5,
+        name = "巨型同轴复合齿轮",
+        teeth = 32,
+        radiusScale = 2.0,
         baseTorque = 132,
-        baseLoad = 14,
-        baseIncome = 8,
+        baseLoad = 1.0,
         purchaseCost = 0,
         upgradeBaseCost = 180,
         fixedSpeedMultiplier = 4.5,
+        incomeBonusPerLevel = 0.20,
         rings = {
             outer = {
                 name = "大型外层齿圈",
-                teeth = 48,
+                teeth = 32,
                 radiusScale = 1.0,
             },
             inner = {
                 name = "同轴小齿圈",
                 teeth = 16,
-                radiusScale = 1 / 3,
+                radiusScale = 0.5,
             },
         },
     },
     compound = {
         type = "compound",
         name = "双层变速齿轮",
-        teeth = 32,
-        radiusScale = 1.0,
+        teeth = 24,
+        radiusScale = 1.5,
         baseTorque = 72,
-        baseLoad = 9,
-        baseIncome = 5,
-        purchaseCost = 160,
+        baseLoad = 0.75,
+        purchaseCost = 1000,
         upgradeBaseCost = 180,
         rings = {
             outer = {
                 name = "外层大齿圈",
-                teeth = 32,
+                teeth = 24,
                 radiusScale = 1.0,
             },
             inner = {
                 name = "内层小齿圈",
                 teeth = 12,
-                radiusScale = 0.375,
+                radiusScale = 0.5,
             },
         },
+    },
+    lubricant = {
+        type = "lubricant",
+        name = "巡游润滑齿轮",
+        teeth = 8,
+        radiusScale = 0.28,
+        baseTorque = 0,
+        baseLoad = 0,
+        purchaseCost = 750,
+        upgradeBaseCost = 100,
+        lubricationDuration = 90,
+        speedBonusPerLevel = 0.25,
+        lifetimeBonusPerLevel = 0.10,
+        cooldownSeconds = 20,
+        lubricationLoadMultiplier = 0.35,
+        patrolSpeedScale = 1.65,
+        patrolOrbitSeconds = 1.8,
+        autonomousRPM = 48,
+        oilEffectDuration = 8,
+    },
+    coin = {
+        type = "coin",
+        name = "大型金币齿轮",
+        teeth = 32,
+        radiusScale = 2.0,
+        baseTorque = 84,
+        baseLoad = 1.25,
+        purchaseCost = 5000,
+        upgradeBaseCost = 750,
+        baseRewardPerTurn = 10,
     },
     momma = {
         type = "momma",
         name = "母齿轮 Momma Gear",
-        teeth = 48,
-        radiusScale = 1.5,
+        teeth = 40,
+        radiusScale = 2.5,
         baseTorque = 240,
-        baseLoad = 1.5,
-        baseIncome = 24,
+        baseLoad = 0.25,
         purchaseCost = 2500,
         upgradeBaseCost = 3000,
         fixedSpeedMultiplier = 11.25,
+        incomeBonusPerLevel = 0.20,
         rings = {
             outer = {
                 name = "母式外层齿圈",
-                teeth = 48,
+                teeth = 40,
                 radiusScale = 1.0,
             },
             inner = {
                 name = "母式内层齿圈",
-                teeth = 16,
-                radiusScale = 1 / 3,
+                teeth = 20,
+                radiusScale = 0.5,
             },
         },
     },
 }
 
 GearDefinitions.TransmissionDecayPerStage = 0.04
+GearDefinitions.DefaultLubricationDuration = 60
 GearDefinitions.SpeedUpgradePerLevel = 0.08
 GearDefinitions.TorqueUpgradePerLevel = 0.12
-GearDefinitions.IncomeUpgradePerLevel = 0.20
 GearDefinitions.UpgradeCostGrowth = 1.75
+GearDefinitions.PurchaseCostGrowth = 1.15
 
 GearDefinitions.GlobalUpgrades = {
     income = {
@@ -163,6 +348,13 @@ GearDefinitions.GlobalUpgrades = {
 
 GearDefinitions.MaxOfflineSeconds = 8 * 60 * 60
 GearDefinitions.TorqueUpgradeUnlockCoins = 25
+GearDefinitions.UpgradeRailUnlockCoins = 25
+GearDefinitions.UpgradeRevealCoins = {
+    torque = 25,
+    circleIncome = 50,
+    manualClick = 75,
+    permanent = 200,
+}
 GearDefinitions.LoadPerLevel = 0.06
 GearDefinitions.RemoteBranchLoadFactor = 0.22
 GearDefinitions.MinimumLayerSpeedFactor = 0.12
@@ -189,12 +381,6 @@ GearDefinitions.EssenceUpgrades = {
     },
 }
 GearDefinitions.MetaUnlocks = {
-    subMaps = {
-        scrapyard = {
-            name = "废铜矿区",
-            cost = 5,
-        },
-    },
     buildings = {
         precisionFoundry = {
             name = "巨型齿轮工厂",
@@ -214,13 +400,13 @@ GearDefinitions.MommaFactory = {
     ascensionSpeedBonusPerCount = 0.03,
     maxAscensionSpeedBonus = 0.45,
     maxStock = 4,
-    fixedLoad = 18,
+    fixedLoad = 0.25,
 }
 
 GearDefinitions.MainUpgrades = {
     torque = { baseCost = 25, costGrowth = 1.7 },
-    circleIncome = { baseCost = 40, costGrowth = 1.85 },
-    manualClick = { baseCost = 10, costGrowth = 1.55 },
+    circleIncome = { baseCost = 50, costGrowth = 1.85 },
+    manualClick = { baseCost = 75, costGrowth = 1.55 },
 }
 
 function GearDefinitions.GetMainTorque(level)
@@ -234,9 +420,11 @@ function GearDefinitions.GetMainCircleIncome(level)
 end
 
 function GearDefinitions.GetMainClickIncome(level)
+    local safeLevel = math.max(0, level or 0)
     return math.min(
         GearDefinitions.Main.manualClickMax,
-        1 + level
+        GearDefinitions.Main.baseManualClickIncome
+            * GearDefinitions.Main.manualClickGrowth ^ safeLevel
     )
 end
 
@@ -267,7 +455,13 @@ function GearDefinitions.GetLayerSpeedFactor(layerLoad, sourceTorque, lubricatio
     local lubricatedLoad = layerLoad * (lubricationMultiplier or 1)
     return math.max(
         GearDefinitions.MinimumLayerSpeedFactor,
-        1 / (1 + lubricatedLoad / math.max(1, sourceTorque))
+        1 / (
+            1
+            + lubricatedLoad / math.max(
+                GearDefinitions.Main.torquePerLevel,
+                sourceTorque
+            )
+        )
     )
 end
 
@@ -300,9 +494,37 @@ function GearDefinitions.Get(gearType)
     return GearDefinitions.Revenue[gearType] or GearDefinitions.Revenue.small
 end
 
+function GearDefinitions.GetPurchaseCost(gearType, purchaseCount)
+    local definition = GearDefinitions.Get(gearType)
+    local safeCount = math.max(0, math.floor(purchaseCount or 0))
+    local currentCost = math.max(
+        0,
+        math.ceil(
+            definition.purchaseCost
+                * GearDefinitions.PurchaseCostGrowth ^ safeCount
+        )
+    )
+    if definition.purchaseCost > 0 and safeCount > 0 then
+        local previousCost = math.ceil(
+            definition.purchaseCost
+                * GearDefinitions.PurchaseCostGrowth ^ (safeCount - 1)
+        )
+        return math.max(previousCost + 1, currentCost)
+    end
+    return currentCost
+end
+
 function GearDefinitions.GetRings(gearType)
     if gearType == "main" then
         return GearDefinitions.Main.rings
+    elseif gearType == GearDefinitions.CurrencyGenerator.id then
+        return GearDefinitions.CurrencyGenerator.rings
+    elseif gearType == GearDefinitions.MiningMachine.id then
+        return GearDefinitions.MiningMachine.rings
+    elseif gearType == GearDefinitions.PowerGeneratorInterface.id then
+        return GearDefinitions.PowerGeneratorInterface.rings
+    elseif gearType == GearDefinitions.ClockInterface.id then
+        return GearDefinitions.ClockInterface.rings
     end
 
     local definition = GearDefinitions.Get(gearType)
@@ -333,13 +555,32 @@ function GearDefinitions.GetSpeedMultiplier(level)
     return 1 + (level - 1) * GearDefinitions.SpeedUpgradePerLevel
 end
 
+function GearDefinitions.GetSpecialIncomeBonus(gearType, level)
+    local definition = GearDefinitions.Get(gearType)
+    return math.max(0, (level or 1) - 1)
+        * (definition.incomeBonusPerLevel or 0)
+end
+
+function GearDefinitions.GetLubricantSpeedMultiplier(level)
+    local definition = GearDefinitions.Get("lubricant")
+    return 1
+        + math.max(0, (level or 1) - 1)
+            * (definition.speedBonusPerLevel or 0)
+end
+
+function GearDefinitions.GetLubricationDuration(level)
+    local definition = GearDefinitions.Get("lubricant")
+    return definition.lubricationDuration
+        * (
+            1
+            + math.max(0, (level or 1) - 1)
+                * (definition.lifetimeBonusPerLevel or 0)
+        )
+end
+
 function GearDefinitions.GetTorqueCapacity(gearType, level)
     local definition = GearDefinitions.Get(gearType)
     return definition.baseTorque * (1 + (level - 1) * GearDefinitions.TorqueUpgradePerLevel)
-end
-
-function GearDefinitions.GetIncomeMultiplier(level)
-    return 1 + (level - 1) * GearDefinitions.IncomeUpgradePerLevel
 end
 
 function GearDefinitions.GetGlobalUpgradeCost(upgradeType, level)

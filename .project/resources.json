@@ -2,12 +2,16 @@
   "$schema": "../schemas/resources.schema.json",
 
   "preload_groups": [
-
+    "default"
   ],
 
   "groups": {
     "default": [
-      "**"
+      "scripts/**",
+      "image/currency_generator_frames/**",
+      "image/power_generator_frames/**",
+      "image/clock_running_frames/**",
+      "image/mining_machine_working_frames/**"
     ]
   }
 }

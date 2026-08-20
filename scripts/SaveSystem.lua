@@ -2,9 +2,10 @@ local GearDefinitions = require("GearDefinitions")
 
 local SaveSystem = {}
 
-local SAVE_VERSION = 8
-local SAVE_PATH_A = "gear_workshop_save_a.json"
-local SAVE_PATH_B = "gear_workshop_save_b.json"
+local SAVE_VERSION = 25
+local MONEY_RESET_VERSION = 20
+local SAVE_PATH_A = "gear_workshop_reset_v5_save_a.json"
+local SAVE_PATH_B = "gear_workshop_reset_v5_save_b.json"
 local MAX_SAVED_GEARS = 100
 
 local currentSequence = 0
@@ -14,7 +15,7 @@ local function SanitizeInteger(value, defaultValue, minimum)
         return defaultValue
     end
 
-    return math.max(minimum, math.floor(value))
+    return math.max(minimum or -math.huge, math.floor(value))
 end
 
 local function SanitizeCoordinate(value, defaultValue)
@@ -63,6 +64,115 @@ local function SanitizeUnlocks(value, includeWorkshop)
     return result
 end
 
+local SanitizeGearPurchaseCounts
+
+local function CreatePermanentContentUnlocks(decoded, gears)
+    local result = SanitizeUnlocks(
+        decoded.permanentContentUnlocks,
+        false
+    )
+    local lifetimeCoins = SanitizeInteger(
+        decoded.lifetimeCoinsEarned,
+        0,
+        0
+    )
+    local purchaseCounts = SanitizeGearPurchaseCounts(
+        decoded.gearPurchaseCounts
+    )
+
+    for gearType, definition in pairs(GearDefinitions.Revenue) do
+        if definition.purchaseCost > 0
+            and (
+                lifetimeCoins >= definition.purchaseCost
+                or (purchaseCounts[gearType] or 0) > 0
+            ) then
+            result["gear:" .. gearType] = true
+        end
+    end
+    for _, gear in ipairs(gears) do
+        result["gear:" .. gear.gearType] = true
+    end
+    if decoded.unlockedBuildings
+        and decoded.unlockedBuildings.precisionFoundry == true then
+        result["gear:momma"] = true
+    end
+    if SanitizeInteger(decoded.mommaFactoryStock, 0, 0) > 0 then
+        result["gear:momma"] = true
+    end
+
+    local revealCoins = GearDefinitions.UpgradeRevealCoins
+    local upgradeLevels = {
+        torque = SanitizeInteger(decoded.mainTorqueLevel, 0, 0),
+        circleIncome = SanitizeInteger(
+            decoded.mainCircleIncomeLevel,
+            0,
+            0
+        ),
+        manualClick = math.max(
+            0,
+            SanitizeInteger(decoded.clickLevel, 1, 1) - 1
+        ),
+        permanent = math.max(
+            SanitizeInteger(decoded.globalIncomeLevel, 0, 0),
+            SanitizeInteger(decoded.decayReductionLevel, 0, 0),
+            SanitizeInteger(decoded.offlineIncomeLevel, 0, 0)
+        ),
+    }
+    for upgradeType, unlockCoins in pairs(revealCoins) do
+        if lifetimeCoins >= unlockCoins
+            or (upgradeLevels[upgradeType] or 0) > 0 then
+            result["upgrade:" .. upgradeType] = true
+        end
+    end
+    if SanitizeInteger(decoded.gearEssence, 0, 0) > 0 then
+        result["upgrade:permanent"] = true
+    end
+
+    return result
+end
+
+SanitizeGearPurchaseCounts = function(value)
+    local result = {}
+    local purchasableTypes = {
+        "small",
+        "medium",
+        "large",
+        "compound",
+        "lubricant",
+        "coin",
+        "momma",
+    }
+    for _, gearType in ipairs(purchasableTypes) do
+        result[gearType] = SanitizeInteger(
+            type(value) == "table" and value[gearType] or nil,
+            0,
+            0
+        )
+    end
+    return result
+end
+
+local function SanitizeMiningOreInventory(value, legacyOre)
+    local definition = GearDefinitions.MiningMachine
+    local result = {}
+    local remainingCapacity = definition.maxOre
+    local source = type(value) == "table" and value or nil
+    for _, oreId in ipairs(definition.oreTypeOrder) do
+        local fallback = source == nil and oreId == "iron"
+                and legacyOre
+            or 0
+        local amount = SanitizeInteger(
+            source and source[oreId] or nil,
+            fallback,
+            0
+        )
+        amount = math.min(remainingCapacity, amount)
+        result[oreId] = amount
+        remainingCapacity = remainingCapacity - amount
+    end
+    return result, definition.maxOre - remainingCapacity
+end
+
 local function SanitizeGears(rawGears)
     local gears = {}
     if type(rawGears) ~= "table" then
@@ -81,6 +191,25 @@ local function SanitizeGears(rawGears)
                 level = SanitizeInteger(rawGear.level, 1, 1),
                 xNorm = SanitizeCoordinate(rawGear.xNorm, 0.5),
                 yNorm = SanitizeCoordinate(rawGear.yNorm, 0.7),
+                anchorX = type(rawGear.anchorX) == "number"
+                        and SanitizeCoordinate(rawGear.anchorX, 0)
+                    or nil,
+                anchorY = type(rawGear.anchorY) == "number"
+                        and SanitizeCoordinate(rawGear.anchorY, 0)
+                    or nil,
+                lubricationRemaining = SanitizeNumber(
+                    rawGear.lubricationRemaining,
+                    GearDefinitions.Get(rawGear.gearType).lubricationDuration
+                        or GearDefinitions.DefaultLubricationDuration,
+                    0
+                ),
+                purchaseCostPaid = type(rawGear.purchaseCostPaid) == "number"
+                        and SanitizeInteger(rawGear.purchaseCostPaid, 0, 0)
+                    or nil,
+                turnProgress = math.min(
+                    0.999999,
+                    SanitizeNumber(rawGear.turnProgress, 0, 0)
+                ),
             }
         end
     end
@@ -122,16 +251,56 @@ local function ReadSlot(path)
         highestGearId = math.max(highestGearId, gear.id)
     end
 
+    local sanitizedMiningInventory, sanitizedMiningTotal =
+        SanitizeMiningOreInventory(
+            decoded.miningOreInventory,
+            math.min(
+                GearDefinitions.MiningMachine.maxOre,
+                SanitizeInteger(decoded.miningOre, 0, 0)
+            )
+        )
+
+    local hasLegacyProgress = version < 25
+        and (
+            SanitizeInteger(decoded.lifetimeCoinsEarned, 0, 0) > 0
+            or SanitizeInteger(decoded.coins, 0, 0) > 0
+            or #gears > 0
+            or SanitizeInteger(decoded.clickLevel, 1, 1) > 1
+            or SanitizeInteger(decoded.mainTorqueLevel, 0, 0) > 0
+            or SanitizeInteger(decoded.mainCircleIncomeLevel, 0, 0) > 0
+            or SanitizeInteger(decoded.ascensionCount, 0, 0) > 0
+            or SanitizeInteger(decoded.gearEssence, 0, 0) > 0
+        )
+
     local data = {
         version = SAVE_VERSION,
+        geometryVersion = SanitizeInteger(
+            decoded.geometryVersion,
+            1,
+            1
+        ),
         sequence = SanitizeInteger(decoded.sequence, 0, 0),
-        coins = SanitizeInteger(decoded.coins, 0, 0),
+        coins = version < MONEY_RESET_VERSION
+                and 0
+            or SanitizeInteger(decoded.coins, 0, 0),
         clickLevel = SanitizeInteger(decoded.clickLevel, 1, 1),
         nextGearId = math.max(
             SanitizeInteger(decoded.nextGearId, highestGearId + 1, 1),
             highestGearId + 1
         ),
         revenueGears = gears,
+        gearPurchaseCounts = SanitizeGearPurchaseCounts(
+            decoded.gearPurchaseCounts
+        ),
+        permanentContentUnlocks = CreatePermanentContentUnlocks(
+            decoded,
+            gears
+        ),
+        lubricantCooldownRemaining = SanitizeNumber(
+            decoded.lubricantCooldownRemaining,
+            0,
+            0
+        ),
         gearEssence = SanitizeInteger(decoded.gearEssence, 0, 0),
         runCoinsEarned = SanitizeInteger(decoded.runCoinsEarned, 0, 0),
         lifetimeCoinsEarned = SanitizeInteger(
@@ -197,6 +366,23 @@ local function ReadSlot(path)
             decoded.autoDriveUnlocked,
             false
         ),
+        gearWarehousePermanentlyUnlocked = SanitizeBoolean(
+            decoded.gearWarehousePermanentlyUnlocked,
+            SanitizeInteger(decoded.lifetimeCoinsEarned, 0, 0)
+                    >= GearDefinitions.Get("small").purchaseCost
+                or #gears > 0
+        ),
+        upgradeRailPermanentlyUnlocked = SanitizeBoolean(
+            decoded.upgradeRailPermanentlyUnlocked,
+            SanitizeInteger(decoded.lifetimeCoinsEarned, 0, 0)
+                    >= GearDefinitions.UpgradeRailUnlockCoins
+                or SanitizeInteger(decoded.mainTorqueLevel, 0, 0) > 0
+                or SanitizeInteger(decoded.mainCircleIncomeLevel, 0, 0) > 0
+                or SanitizeInteger(decoded.clickLevel, 1, 1) > 1
+                or SanitizeInteger(decoded.globalIncomeLevel, 0, 0) > 0
+                or SanitizeInteger(decoded.decayReductionLevel, 0, 0) > 0
+                or SanitizeInteger(decoded.offlineIncomeLevel, 0, 0) > 0
+        ),
         autoDriveLevel = SanitizeInteger(decoded.autoDriveLevel, 0, 0),
         globalIncomeLevel = SanitizeInteger(decoded.globalIncomeLevel, 0, 0),
         decayReductionLevel = SanitizeInteger(decoded.decayReductionLevel, 0, 0),
@@ -205,6 +391,66 @@ local function ReadSlot(path)
         savedIncomePerSecond = SanitizeNumber(decoded.savedIncomePerSecond, 0, 0),
         pendingOfflineCoins = SanitizeInteger(decoded.pendingOfflineCoins, 0, 0),
         pendingOfflineSeconds = SanitizeInteger(decoded.pendingOfflineSeconds, 0, 0),
+        idleAdDayKey = SanitizeInteger(decoded.idleAdDayKey, 0, 0),
+        idleAdWatchCount = math.min(
+            2,
+            SanitizeInteger(decoded.idleAdWatchCount, 0, 0)
+        ),
+        idleEligibleUntil = SanitizeInteger(
+            decoded.idleEligibleUntil,
+            0,
+            0
+        ),
+        currencyGeneratorProgress = math.min(
+            0.999999,
+            SanitizeNumber(decoded.currencyGeneratorProgress, 0, 0)
+        ),
+        currencyGeneratorLastDirection = math.max(
+            -1,
+            math.min(
+                1,
+                SanitizeInteger(
+                    decoded.currencyGeneratorLastDirection,
+                    0,
+                    -1
+                )
+            )
+        ),
+        miningProgress = math.min(
+            0.999999,
+            SanitizeNumber(decoded.miningProgress, 0, 0)
+        ),
+        miningOre = sanitizedMiningTotal,
+        miningOreInventory = sanitizedMiningInventory,
+        miningDrillLevel = math.min(
+            #GearDefinitions.MiningMachine.drillLevels,
+            SanitizeInteger(decoded.miningDrillLevel, 1, 1)
+        ),
+        mainGearTurnProgress = math.min(
+            0.999999,
+            SanitizeNumber(decoded.mainGearTurnProgress, 0, 0)
+        ),
+        manualClickIncomeRemainder = math.min(
+            0.999999,
+            SanitizeNumber(decoded.manualClickIncomeRemainder, 0, 0)
+        ),
+        lubricantTutorialCompleted = SanitizeBoolean(
+            decoded.lubricantTutorialCompleted,
+            false
+        ),
+        lubricantTutorialStep = type(decoded.lubricantTutorialStep) == "string"
+                and decoded.lubricantTutorialStep
+            or "lubricant_earn",
+        tutorialVersion = SanitizeInteger(
+            decoded.tutorialVersion,
+            hasLegacyProgress and 1 or 0,
+            0
+        ),
+        tutorialStep = type(decoded.tutorialStep) == "string"
+                and decoded.tutorialStep
+            or "tap_main",
+        tutorialCompleted = hasLegacyProgress
+            or SanitizeBoolean(decoded.tutorialCompleted, false),
     }
 
     print(string.format(
@@ -218,6 +464,67 @@ local function ReadSlot(path)
         #data.revenueGears
     ))
     return data
+end
+
+local function CreateNewGameData()
+    return {
+        geometryVersion = GearDefinitions.GeometryVersion,
+        coins = 0,
+        clickLevel = 1,
+        nextGearId = 1,
+        revenueGears = {},
+        gearPurchaseCounts = SanitizeGearPurchaseCounts(nil),
+        permanentContentUnlocks = {},
+        lubricantCooldownRemaining = 0,
+        gearEssence = 0,
+        runCoinsEarned = 0,
+        lifetimeCoinsEarned = 0,
+        ascensionCount = 0,
+        metaRevision = 3000000,
+        unlockedSubMaps = { workshop = true },
+        unlockedBuildings = {},
+        growthWindowStartTimestamp = 0,
+        growthWindowElapsedSeconds = 0,
+        growthWindowStartIncome = 0,
+        ascensionRecommendationShown = false,
+        mommaFactoryStock = 0,
+        mommaFactoryProgressSeconds = 0,
+        mommaFactoryLastTimestamp = 0,
+        mainTorqueLevel = 0,
+        mainCircleIncomeLevel = 0,
+        autoDriveUnlocked = false,
+        gearWarehousePermanentlyUnlocked = false,
+        upgradeRailPermanentlyUnlocked = false,
+        autoDriveLevel = 0,
+        globalIncomeLevel = 0,
+        decayReductionLevel = 0,
+        offlineIncomeLevel = 0,
+        lastActiveTimestamp = 0,
+        savedIncomePerSecond = 0,
+        pendingOfflineCoins = 0,
+        pendingOfflineSeconds = 0,
+        idleAdDayKey = 0,
+        idleAdWatchCount = 0,
+        idleEligibleUntil = 0,
+        currencyGeneratorProgress = 0,
+        currencyGeneratorLastDirection = 0,
+        miningProgress = 0,
+        miningOre = 0,
+        miningOreInventory = SanitizeMiningOreInventory(nil, 0),
+        miningDrillLevel = 1,
+        mainGearTurnProgress = 0,
+        manualClickIncomeRemainder = 0,
+        lubricantTutorialCompleted = false,
+        lubricantTutorialStep = "lubricant_earn",
+        tutorialVersion = 0,
+        tutorialStep = "tap_main",
+        tutorialCompleted = false,
+    }
+end
+
+function SaveSystem.CreateNewGameData()
+    currentSequence = 0
+    return CreateNewGameData()
 end
 
 function SaveSystem.Load()
@@ -234,45 +541,20 @@ function SaveSystem.Load()
     if not selected then
         currentSequence = 0
         print("[SaveSystem] 未找到有效存档，使用新游戏数据")
-        return {
-            coins = 0,
-            clickLevel = 1,
-            nextGearId = 1,
-            revenueGears = {},
-            gearEssence = 0,
-            runCoinsEarned = 0,
-            lifetimeCoinsEarned = 0,
-            ascensionCount = 0,
-            metaRevision = 0,
-            unlockedSubMaps = { workshop = true },
-            unlockedBuildings = {},
-            growthWindowStartTimestamp = 0,
-            growthWindowElapsedSeconds = 0,
-            growthWindowStartIncome = 0,
-            ascensionRecommendationShown = false,
-            mommaFactoryStock = 0,
-            mommaFactoryProgressSeconds = 0,
-            mommaFactoryLastTimestamp = 0,
-            mainTorqueLevel = 0,
-            mainCircleIncomeLevel = 0,
-            autoDriveUnlocked = false,
-            autoDriveLevel = 0,
-            globalIncomeLevel = 0,
-            decayReductionLevel = 0,
-            offlineIncomeLevel = 0,
-            lastActiveTimestamp = 0,
-            savedIncomePerSecond = 0,
-            pendingOfflineCoins = 0,
-            pendingOfflineSeconds = 0,
-        }
+        return CreateNewGameData()
     end
 
     currentSequence = selected.sequence
     return {
+        geometryVersion = selected.geometryVersion,
         coins = selected.coins,
         clickLevel = selected.clickLevel,
         nextGearId = selected.nextGearId,
         revenueGears = selected.revenueGears,
+        gearPurchaseCounts = selected.gearPurchaseCounts,
+        permanentContentUnlocks = selected.permanentContentUnlocks,
+        lubricantCooldownRemaining =
+            selected.lubricantCooldownRemaining,
         gearEssence = selected.gearEssence,
         runCoinsEarned = selected.runCoinsEarned,
         lifetimeCoinsEarned = selected.lifetimeCoinsEarned,
@@ -290,6 +572,10 @@ function SaveSystem.Load()
         mainTorqueLevel = selected.mainTorqueLevel,
         mainCircleIncomeLevel = selected.mainCircleIncomeLevel,
         autoDriveUnlocked = selected.autoDriveUnlocked,
+        gearWarehousePermanentlyUnlocked =
+            selected.gearWarehousePermanentlyUnlocked,
+        upgradeRailPermanentlyUnlocked =
+            selected.upgradeRailPermanentlyUnlocked,
         autoDriveLevel = selected.autoDriveLevel,
         globalIncomeLevel = selected.globalIncomeLevel,
         decayReductionLevel = selected.decayReductionLevel,
@@ -298,19 +584,55 @@ function SaveSystem.Load()
         savedIncomePerSecond = selected.savedIncomePerSecond,
         pendingOfflineCoins = selected.pendingOfflineCoins,
         pendingOfflineSeconds = selected.pendingOfflineSeconds,
+        idleAdDayKey = selected.idleAdDayKey,
+        idleAdWatchCount = selected.idleAdWatchCount,
+        idleEligibleUntil = selected.idleEligibleUntil,
+        currencyGeneratorProgress = selected.currencyGeneratorProgress,
+        currencyGeneratorLastDirection =
+            selected.currencyGeneratorLastDirection,
+        miningProgress = selected.miningProgress,
+        miningOre = selected.miningOre,
+        miningOreInventory = selected.miningOreInventory,
+        miningDrillLevel = selected.miningDrillLevel,
+        mainGearTurnProgress = selected.mainGearTurnProgress,
+        manualClickIncomeRemainder = selected.manualClickIncomeRemainder,
+        lubricantTutorialCompleted = selected.lubricantTutorialCompleted,
+        lubricantTutorialStep = selected.lubricantTutorialStep,
+        tutorialVersion = selected.tutorialVersion,
+        tutorialStep = selected.tutorialStep,
+        tutorialCompleted = selected.tutorialCompleted,
     }
 end
 
 function SaveSystem.Save(gameData)
     currentSequence = currentSequence + 1
 
+    local sanitizedMiningInventory, sanitizedMiningTotal =
+        SanitizeMiningOreInventory(
+            gameData.miningOreInventory,
+            gameData.miningOre or 0
+        )
+
     local saveData = {
         version = SAVE_VERSION,
+        geometryVersion = GearDefinitions.GeometryVersion,
         sequence = currentSequence,
         coins = SanitizeInteger(gameData.coins, 0, 0),
         clickLevel = SanitizeInteger(gameData.clickLevel, 1, 1),
         nextGearId = SanitizeInteger(gameData.nextGearId, 1, 1),
         revenueGears = SanitizeGears(gameData.revenueGears),
+        gearPurchaseCounts = SanitizeGearPurchaseCounts(
+            gameData.gearPurchaseCounts
+        ),
+        permanentContentUnlocks = SanitizeUnlocks(
+            gameData.permanentContentUnlocks,
+            false
+        ),
+        lubricantCooldownRemaining = SanitizeNumber(
+            gameData.lubricantCooldownRemaining,
+            0,
+            0
+        ),
         gearEssence = SanitizeInteger(gameData.gearEssence, 0, 0),
         runCoinsEarned = SanitizeInteger(gameData.runCoinsEarned, 0, 0),
         lifetimeCoinsEarned = SanitizeInteger(
@@ -376,6 +698,14 @@ function SaveSystem.Save(gameData)
             gameData.autoDriveUnlocked,
             false
         ),
+        gearWarehousePermanentlyUnlocked = SanitizeBoolean(
+            gameData.gearWarehousePermanentlyUnlocked,
+            false
+        ),
+        upgradeRailPermanentlyUnlocked = SanitizeBoolean(
+            gameData.upgradeRailPermanentlyUnlocked,
+            false
+        ),
         autoDriveLevel = SanitizeInteger(gameData.autoDriveLevel, 0, 0),
         globalIncomeLevel = SanitizeInteger(gameData.globalIncomeLevel, 0, 0),
         decayReductionLevel = SanitizeInteger(gameData.decayReductionLevel, 0, 0),
@@ -384,6 +714,68 @@ function SaveSystem.Save(gameData)
         savedIncomePerSecond = SanitizeNumber(gameData.savedIncomePerSecond, 0, 0),
         pendingOfflineCoins = SanitizeInteger(gameData.pendingOfflineCoins, 0, 0),
         pendingOfflineSeconds = SanitizeInteger(gameData.pendingOfflineSeconds, 0, 0),
+        idleAdDayKey = SanitizeInteger(gameData.idleAdDayKey, 0, 0),
+        idleAdWatchCount = math.min(
+            2,
+            SanitizeInteger(gameData.idleAdWatchCount, 0, 0)
+        ),
+        idleEligibleUntil = SanitizeInteger(
+            gameData.idleEligibleUntil,
+            0,
+            0
+        ),
+        currencyGeneratorProgress = math.min(
+            0.999999,
+            SanitizeNumber(gameData.currencyGeneratorProgress, 0, 0)
+        ),
+        currencyGeneratorLastDirection = math.max(
+            -1,
+            math.min(
+                1,
+                SanitizeInteger(
+                    gameData.currencyGeneratorLastDirection,
+                    0,
+                    -1
+                )
+            )
+        ),
+        miningProgress = math.min(
+            0.999999,
+            SanitizeNumber(gameData.miningProgress, 0, 0)
+        ),
+        miningOre = sanitizedMiningTotal,
+        miningOreInventory = sanitizedMiningInventory,
+        miningDrillLevel = math.min(
+            #GearDefinitions.MiningMachine.drillLevels,
+            SanitizeInteger(gameData.miningDrillLevel, 1, 1)
+        ),
+        mainGearTurnProgress = math.min(
+            0.999999,
+            SanitizeNumber(gameData.mainGearTurnProgress, 0, 0)
+        ),
+        manualClickIncomeRemainder = math.min(
+            0.999999,
+            SanitizeNumber(gameData.manualClickIncomeRemainder, 0, 0)
+        ),
+        lubricantTutorialCompleted = SanitizeBoolean(
+            gameData.lubricantTutorialCompleted,
+            false
+        ),
+        lubricantTutorialStep = type(gameData.lubricantTutorialStep) == "string"
+                and gameData.lubricantTutorialStep
+            or "lubricant_earn",
+        tutorialVersion = SanitizeInteger(
+            gameData.tutorialVersion,
+            0,
+            0
+        ),
+        tutorialStep = type(gameData.tutorialStep) == "string"
+                and gameData.tutorialStep
+            or "tap_main",
+        tutorialCompleted = SanitizeBoolean(
+            gameData.tutorialCompleted,
+            false
+        ),
     }
 
     local ok, encoded = pcall(cjson.encode, saveData)
